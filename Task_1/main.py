@@ -1,4 +1,5 @@
 import secrets
+import curses
 
 class User:
     def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth):
@@ -46,3 +47,72 @@ default_classes = {
     "Business": 3.0,
     "First Class": 6.0
 }
+def login_page(screen):
+    screen.clear()
+    screen.addstr(1, 2, "=== Login ===", curses.A_BOLD)
+    screen.addstr(3, 2, "Login feature coming soon...")
+    screen.addstr(5, 2, "[Press any key to go back]")
+    screen.refresh()
+    screen.getch()
+
+def register_page(screen):
+    screen.clear()
+    screen.addstr(1, 2, "=== Register ===", curses.A_BOLD)
+    screen.addstr(3, 2, "Registration form coming soon...")
+    screen.addstr(5, 2, "[Press any key to go back]")
+    screen.refresh()
+    screen.getch()
+
+def find_flights_page(screen):
+    screen.clear()
+    screen.addstr(1, 2, "=== Find Flights ===", curses.A_BOLD)
+    screen.addstr(3, 2, "Search for flights here...")
+    screen.addstr(5, 2, "[Press any key to go back]")
+    screen.refresh()
+    screen.getch()
+
+def Menu(screen):
+    curses.curs_set(0)
+    if curses.has_colors():
+        curses.start_color()
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+
+    options = ["Login", "Register", "Find Flights", "Exit"]
+    current_row = 0
+
+    while True:
+        screen.clear()
+        
+        title = "=== AeroFlow ==="
+        screen.addstr(1, 2, title, curses.A_BOLD)
+        screen.addstr(2, 2, "Use UP/DOWN arrows to navigate, and ENTER to select.", curses.A_DIM)
+
+        for idx, row in enumerate(options):
+            x = 4
+            y = 4 + idx
+            if idx == current_row:
+                screen.attron(curses.color_pair(1) | curses.A_BOLD)
+                screen.addstr(y, x, f"> {row}")
+                screen.attroff(curses.color_pair(1) | curses.A_BOLD)
+            else:
+                screen.addstr(y, x, f"  {row}")
+        
+        screen.refresh()
+        key = screen.getch()
+        
+        if key == curses.KEY_UP and current_row > 0:
+            current_row -= 1
+        elif key == curses.KEY_DOWN and current_row < len(options) - 1:
+            current_row += 1
+        elif key in [curses.KEY_ENTER, 10, 13]:
+            if options[current_row] == "Exit":
+                break
+            elif options[current_row] == "Login":
+                login_page(screen)
+            elif options[current_row] == "Register":
+                register_page(screen)
+            elif options[current_row] == "Find Flights":
+                find_flights_page(screen)
+
+if __name__ == "__main__":
+    curses.wrapper(Menu)
