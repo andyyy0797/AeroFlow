@@ -1,8 +1,13 @@
 import secrets
-import curses
+from textual.app import App, ComposeResult
+from textual.containers import Vertical
+from textual.widgets import Header, Footer, Button, Label, Input
+from textual.screen import Screen
+import sqlite3
 
 class User:
-    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth):
+    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, user_id=None, is_admin=0):
+        self.user_id = user_id if user_id else secrets.token_hex(4)
         self.email = email
         self.password = password
         self.firstName = firstName
@@ -10,20 +15,21 @@ class User:
         self.gender = gender
         self.nationality = nationality
         self.dateOfBirth = dateOfBirth
+        self.is_admin = is_admin
 
 
 class Admin(User):
-    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth):
-        super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth)
+    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, user_id=None):
+        super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth, user_id=user_id, is_admin=1)
 
 
 class Passenger(User):
-    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth):
-        super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth)
-        self.passenger_id = secrets.token_hex(5)
+    def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, user_id=None):
+        super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth, user_id=user_id, is_admin=0)
 
 class Flight:
-    def __init__(self, flight_number, departure, destination, departure_time, arrival_time, classes_available, standard_price):
+    def __init__(self, flight_number, departure, destination, departure_time, arrival_time, classes_available, standard_price, flight_id=None):
+        self.flight_id = flight_id
         self.flight_number = flight_number
         self.departure = departure
         self.destination = destination
@@ -34,85 +40,147 @@ class Flight:
 
 
 class Booking:
-    def __init__(self, passenger, flight, travel_class, price):
-        self.booking_id = secrets.token_hex(8)
-        self.passenger = passenger
-        self.flight = flight
+    def __init__(self, user_id, flight_id, travel_class, price, booking_id=None):
+        self.booking_id = booking_id if booking_id else secrets.token_hex(4)
+        self.user_id = user_id
+        self.flight_id = flight_id
         self.travel_class = travel_class
         self.price = price
 
+class DatabaseManager:
+    def __init__(self, db_name="aeroflow.db"):
+        self.db_name = db_name
+
+    def get_connection(self):
+        return sqlite3.connect(self.db_name)
+
+    def register_user(self, user):
+        pass
+
+    def authenticate_user(self, email, password):
+        pass
+
+    def add_flight(self, flight):
+        pass
+
+    def search_flights(self, departure, destination, date):
+        pass
+
+    def create_booking(self, booking):
+        pass
+
+    def get_user_bookings(self, user_id):
+        pass
+
 default_classes = {
-    "Economy": 1.0,
-    "Premium Economy": 2.2,
-    "Business": 3.0,
-    "First Class": 6.0
+    "economy": 1.0,
+    "premium_economy": 2.2,
+    "business": 3.0,
+    "first": 6.0
 }
-def login_page(screen):
-    screen.clear()
-    screen.addstr(1, 2, "=== Login ===", curses.A_BOLD)
-    screen.addstr(3, 2, "Login feature coming soon...")
-    screen.addstr(5, 2, "[Press any key to go back]")
-    screen.refresh()
-    screen.getch()
 
-def register_page(screen):
-    screen.clear()
-    screen.addstr(1, 2, "=== Register ===", curses.A_BOLD)
-    screen.addstr(3, 2, "Registration form coming soon...")
-    screen.addstr(5, 2, "[Press any key to go back]")
-    screen.refresh()
-    screen.getch()
+class LoginScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== User Login ===", classes="title"),
+            Input(placeholder="Email", id="email"),
+            Input(placeholder="Password", password=True, id="password"),
+            Button("Login", id="login", variant="primary"),
+            Button("Back", id="back")
+        )
+        yield Footer()
 
-def find_flights_page(screen):
-    screen.clear()
-    screen.addstr(1, 2, "=== Find Flights ===", curses.A_BOLD)
-    screen.addstr(3, 2, "Search for flights here...")
-    screen.addstr(5, 2, "[Press any key to go back]")
-    screen.refresh()
-    screen.getch()
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
+        elif event.button.id == "login":
+            email = self.query_one("#email", Input).value
+            self.notify(f"Logging in as '{email}'...")
+            self.notify("[ Login Successful ]")
+            self.app.pop_screen()
 
-def Menu(screen):
-    curses.curs_set(0)
-    if curses.has_colors():
-        curses.start_color()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
+class RegisterScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Register ===", classes="title"),
+            Label("Registration form coming soon..."),
+            Button("Back", id="back")
+        )
+        yield Footer()
 
-    options = ["Login", "Register", "Find Flights", "Exit"]
-    current_row = 0
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
 
-    while True:
-        screen.clear()
-        
-        title = "=== AeroFlow ==="
-        screen.addstr(1, 2, title, curses.A_BOLD)
-        screen.addstr(2, 2, "Use UP/DOWN arrows to navigate, and ENTER to select.", curses.A_DIM)
+class FindFlightsScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Find Flights ===", classes="title"),
+            Label("Search for flights here..."),
+            Button("Back", id="back")
+        )
+        yield Footer()
 
-        for idx, row in enumerate(options):
-            x = 4
-            y = 4 + idx
-            if idx == current_row:
-                screen.attron(curses.color_pair(1) | curses.A_BOLD)
-                screen.addstr(y, x, f"> {row}")
-                screen.attroff(curses.color_pair(1) | curses.A_BOLD)
-            else:
-                screen.addstr(y, x, f"  {row}")
-        
-        screen.refresh()
-        key = screen.getch()
-        
-        if key == curses.KEY_UP and current_row > 0:
-            current_row -= 1
-        elif key == curses.KEY_DOWN and current_row < len(options) - 1:
-            current_row += 1
-        elif key in [curses.KEY_ENTER, 10, 13]:
-            if options[current_row] == "Exit":
-                break
-            elif options[current_row] == "Login":
-                login_page(screen)
-            elif options[current_row] == "Register":
-                register_page(screen)
-            elif options[current_row] == "Find Flights":
-                find_flights_page(screen)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
+
+class MainMenu(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== AeroFlow ===", classes="title"),
+            Label("Choose an function.", classes="subtitle"),
+            Button("Login", id="login"),
+            Button("Register", id="register"),
+            Button("Find Flights", id="find_flights"),
+            Button("Exit", id="exit", variant="error")
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "login":
+            self.app.push_screen(LoginScreen())
+        elif event.button.id == "register":
+            self.app.push_screen(RegisterScreen())
+        elif event.button.id == "find_flights":
+            self.app.push_screen(FindFlightsScreen())
+        elif event.button.id == "exit":
+            self.app.exit()
+
+class AeroFlow(App):
+    CSS = """
+    Screen {
+        align: center middle;
+    }
+    Vertical {
+        width: 40;
+        align: center middle;
+    }
+    Button {
+        width: 100%;
+        margin-top: 1;
+    }
+    .title {
+        text-align: center;
+        width: 100%;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    .subtitle {
+        text-align: center;
+        width: 100%;
+        color: $text-muted;
+        margin-bottom: 2;
+    }
+    """
+
+    def on_mount(self) -> None:
+        self.push_screen(MainMenu())
 
 if __name__ == "__main__":
-    curses.wrapper(Menu)
+    app = AeroFlow()
+    app.run()
