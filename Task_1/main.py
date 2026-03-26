@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
-from textual.widgets import Header, Footer, Button, Label, Input, Select
+from textual.widgets import Header, Footer, Button, Label, Input, Select, OptionList, DataTable
 from textual.screen import Screen
 import sqlite3
 from datetime import datetime
@@ -55,8 +55,8 @@ class Booking:
 class DatabaseManager:
     def __init__(self, db_name="aeroflow.db"):
         self.base_dir = Path(__file__).parent
-        self.db_path = self.base_dir / db_name
-        self.db_name = str(self.db_path)
+        self.dbPath = self.base_dir / db_name
+        self.db_name = str(self.dbPath)
         self.checkDatabaseExists()
 
     def getConnection(self):
@@ -65,14 +65,14 @@ class DatabaseManager:
         return conn
 
     def checkDatabaseExists(self):
-        if self.db_path.exists():
+        if self.dbPath.exists():
             return
 
-        create_db_script = self.base_dir / "legacy" / "create_db.py"
-        if not create_db_script.exists():
-            raise FileNotFoundError(f"Missing database bootstrap script: {create_db_script}")
+        createDbScript = self.base_dir / "legacy" / "create_db.py"
+        if not createDbScript.exists():
+            raise FileNotFoundError(f"Missing database bootstrap script: {createDbScript}")
 
-        subprocess.run([sys.executable, str(create_db_script)], check=True)
+        subprocess.run([sys.executable, str(createDbScript)], check=True)
 
     def registerUser(self, user):
         normalizedEmail = user.email.strip().lower()
@@ -120,8 +120,8 @@ class DatabaseManager:
         if row["password"] != password:
             return None, "Wrong password"
 
-        user_class = Admin if row["is_admin"] else Passenger
-        user = user_class(
+        userClass = Admin if row["is_admin"] else Passenger
+        user = userClass(
             email=row["email"],
             password=row["password"],
             firstName=row["first_name"],
@@ -184,7 +184,7 @@ class DatabaseManager:
                     arrivalTime=row["arrival_time"],
                     classesAvailable=classesAvailable,
                     standardPrice=row["standard_price"],
-                    flightID=row["flight_id"],
+                    flightID=row["flightID"],
                 )
             )
         return results
@@ -193,7 +193,7 @@ class DatabaseManager:
         with self.getConnection() as conn:
             conn.execute(
                 """
-                INSERT INTO bookings (booking_id, user_id, flight_id, travel_class, price)
+                INSERT INTO bookings (booking_id, user_id, flightID, travel_class, price)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
@@ -210,10 +210,10 @@ class DatabaseManager:
         with self.getConnection() as conn:
             rows = conn.execute(
                 """
-                  SELECT b.booking_id, b.user_id, b.flight_id, b.travel_class, b.price,
+                  SELECT b.booking_id, b.user_id, b.flightID, b.travel_class, b.price,
                       f.flight_number, f.departure, f.destination, f.departure_time, f.arrival_time
                 FROM bookings b
-                  JOIN flights f ON b.flight_id = f.flight_id
+                  JOIN flights f ON b.flightID = f.flightID
                   WHERE b.user_id = ?
                   ORDER BY f.departure_time ASC
                 """,
@@ -259,6 +259,30 @@ class DatabaseManager:
             return False, "Booking not found"
         return True, "Booking cancelled"
 
+    def getLocations(self):
+        with self.getConnection() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT departure AS location FROM flights
+                UNION
+                SELECT DISTINCT destination AS location FROM flights
+                """
+            ).fetchall()
+        return [row["location"].title() for row in rows if row["location"]]
+
+    def getFutureLocations(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self.getConnection() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT departure AS location FROM flights WHERE departure_time >= ?
+                UNION
+                SELECT DISTINCT destination AS location FROM flights WHERE departure_time >= ?
+                """,
+                (today, today)
+            ).fetchall()
+        return [row["location"].title() for row in rows if row["location"]]
+
 defaultClasses = {
     "economy": 1.0,
     "premium_economy": 2.2,
@@ -267,7 +291,7 @@ defaultClasses = {
 }
 
 
-db_manager = DatabaseManager()
+dbManager = DatabaseManager()
 
 class LoginScreen(Screen):
     def __init__(self, prefillEmail: str = ""):
@@ -289,9 +313,9 @@ class LoginScreen(Screen):
         if event.button.id == "back":
             self.app.pop_screen()
         elif event.button.id == "login":
-            email = self.query_one("#email", Input).value
-            password = self.query_one("#password", Input).value
-            user, message = db_manager.authenticateUser(email, password)
+            email = self.queryOne("#email", Input).value
+            password = self.queryOne("#password", Input).value
+            user, message = dbManager.authenticateUser(email, password)
             if user is None:
                 self.notify(message, severity="error")
                 return
@@ -336,8 +360,8 @@ class RegisterScreen(Screen):
     ]
 
     def yearOptions(self):
-        current_year = datetime.now().year
-        return [(str(year), str(year)) for year in range(current_year - 100, current_year + 1)]
+        currentYear = datetime.now().year
+        return [(str(year), str(year)) for year in range(currentYear - 100, currentYear + 1)]
 
     def monthOptions(self):
         return [(f"{name} ({month:02d})", f"{month:02d}") for month, name in enumerate(self.MONTH_NAMES, start=1)]
@@ -356,19 +380,19 @@ class RegisterScreen(Screen):
         return [(f"{day:02d}", f"{day:02d}") for day in range(1, self.daysInMonth(year, month) + 1)]
 
     def selectedYearMonth(self) -> tuple[int, int]:
-        year_select = self.query_one("#dob_year", Select)
-        month_select = self.query_one("#dob_month", Select)
+        yearSelect = self.queryOne("#dobYear", Select)
+        monthSelect = self.queryOne("#dobMonth", Select)
 
-        year_value = year_select.value
-        month_value = month_select.value
-        current_year = datetime.now().year
+        yearValue = yearSelect.value
+        monthValue = monthSelect.value
+        currentYear = datetime.now().year
 
-        year = int(year_value) if year_value != Select.BLANK else current_year
-        month = int(month_value) if month_value != Select.BLANK else 1
+        year = int(yearValue) if yearValue != Select.BLANK else currentYear
+        month = int(monthValue) if monthValue != Select.BLANK else 1
         return year, month
 
     def updateDayOptions(self):
-        day_select = self.query_one("#dob_day", Select)
+        day_select = self.queryOne("#dobDay", Select)
         current_day = day_select.value
         year, month = self.selectedYearMonth()
         max_day = self.daysInMonth(year, month)
@@ -382,7 +406,7 @@ class RegisterScreen(Screen):
         self.updateDayOptions()
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id in {"dob_year", "dob_month"}:
+        if event.select.id in {"dobYear", "dobMonth"}:
             self.updateDayOptions()
 
     def compose(self) -> ComposeResult:
@@ -397,9 +421,9 @@ class RegisterScreen(Screen):
             Input(placeholder="Nationality", id="nationality"),
             Label("Date of birth", classes="field_label"),
             Horizontal(
-                Select(self.yearOptions(), prompt="Year", id="dob_year", allow_blank=False, classes="dob_picker"),
-                Select(self.monthOptions(), prompt="Month", id="dob_month", allow_blank=False, classes="dob_picker"),
-                Select(self.dayOptions(datetime.now().year, 1), prompt="Day", id="dob_day", allow_blank=False, classes="dob_picker"),
+                Select(self.yearOptions(), prompt="Year", id="dobYear", allow_blank=False, classes="dob_picker"),
+                Select(self.monthOptions(), prompt="Month", id="dobMonth", allow_blank=False, classes="dob_picker"),
+                Select(self.dayOptions(datetime.now().year, 1), prompt="Day", id="dobDay", allow_blank=False, classes="dob_picker"),
                 id="dob_row",
             ),
             Button("Register", id="register", variant="primary"),
@@ -411,25 +435,25 @@ class RegisterScreen(Screen):
         if event.button.id == "back":
             self.app.pop_screen()
         elif event.button.id == "register":
-            dob_year = self.query_one("#dob_year", Select).value
-            dob_month = self.query_one("#dob_month", Select).value
-            dob_day = self.query_one("#dob_day", Select).value
-            required_values = {
-                "email": self.query_one("#email", Input).value.strip(),
-                "password": self.query_one("#password", Input).value,
-                "first_name": self.query_one("#first_name", Input).value.strip(),
-                "last_name": self.query_one("#last_name", Input).value.strip(),
-                "gender": self.query_one("#gender", Input).value.strip(),
-                "nationality": self.query_one("#nationality", Input).value.strip(),
+            dobYear = self.queryOne("#dobYear", Select).value
+            dobMonth = self.queryOne("#dobMonth", Select).value
+            dobDay = self.queryOne("#dobDay", Select).value
+            requiredValue = {
+                "email": self.queryOne("#email", Input).value.strip(),
+                "password": self.queryOne("#password", Input).value,
+                "first_name": self.queryOne("#first_name", Input).value.strip(),
+                "last_name": self.queryOne("#last_name", Input).value.strip(),
+                "gender": self.queryOne("#gender", Input).value.strip(),
+                "nationality": self.queryOne("#nationality", Input).value.strip(),
             }
-            if any(not value for value in required_values.values()):
+            if any(not value for value in requiredValue.values()):
                 self.notify("Please fill in all fields", severity="warning")
                 return
-            if dob_year == Select.BLANK or dob_month == Select.BLANK or dob_day == Select.BLANK:
+            if dobYear == Select.BLANK or dobMonth == Select.BLANK or dobDay == Select.BLANK:
                 self.notify("Please select a complete date of birth", severity="warning")
                 return
 
-            date_of_birth = f"{dob_year}-{dob_month}-{dob_day}"
+            date_of_birth = f"{dobYear}-{dobMonth}-{dobDay}"
             try:
                 datetime.strptime(date_of_birth, "%Y-%m-%d")
             except ValueError:
@@ -437,27 +461,34 @@ class RegisterScreen(Screen):
                 return
 
             user = Passenger(
-                email=required_values["email"],
-                password=required_values["password"],
-                firstName=required_values["first_name"],
-                lastName=required_values["last_name"],
-                gender=required_values["gender"],
-                nationality=required_values["nationality"],
+                email=requiredValue["email"],
+                password=requiredValue["password"],
+                firstName=requiredValue["first_name"],
+                lastName=requiredValue["last_name"],
+                gender=requiredValue["gender"],
+                nationality=requiredValue["nationality"],
                 dateOfBirth=date_of_birth,
             )
-            success, message = db_manager.registerUser(user)
+            success, message = dbManager.registerUser(user)
             self.notify(message, severity="information" if success else "error")
             if success:
                 self.app.pop_screen()
                 self.app.push_screen(LoginScreen(prefillEmail=user.email))
 
 class FindFlightsScreen(Screen):
+    def on_mount(self) -> None:
+        self.locations = dbManager.getFutureLocations()
+        self.queryOne("#departure_list").display = False
+        self.queryOne("#destination_list").display = False
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield Vertical(
             Label("=== Find Flights ===", classes="title"),
             Input(placeholder="Departure", id="departure"),
+            OptionList(id="departure_list", classes="autocomplete_list"),
             Input(placeholder="Destination", id="destination"),
+            OptionList(id="destination_list", classes="autocomplete_list"),
             Input(placeholder="Date (YYYY-MM-DD)", id="date"),
             Button("Search", id="search", variant="primary"),
             Label("", id="results"),
@@ -465,27 +496,88 @@ class FindFlightsScreen(Screen):
         )
         yield Footer()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id in {"departure", "destination"}:
+            val = event.input.value.strip().lower()
+            list_id = f"#{event.input.id}_list"
+            option_list = self.queryOne(list_id, OptionList)
+            
+            if not val:
+                option_list.display = False
+                return
+                
+            matches = [loc for loc in self.locations if val in loc.lower()]
+            if matches:
+                option_list.clear_options()
+                for match in matches:
+                    option_list.add_option(match)
+                option_list.display = True
+            else:
+                option_list.display = False
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id == "departure_list":
+            self.queryOne("#departure", Input).value = str(event.option.prompt)
+            event.option_list.display = False
+            self.queryOne("#destination", Input).focus()
+        elif event.option_list.id == "destination_list":
+            self.queryOne("#destination", Input).value = str(event.option.prompt)
+            event.option_list.display = False
+            self.queryOne("#date", Input).focus()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
             self.app.pop_screen()
         elif event.button.id == "search":
-            departure = self.query_one("#departure", Input).value
-            destination = self.query_one("#destination", Input).value
-            date = self.query_one("#date", Input).value
-            flights = db_manager.searchFlights(departure, destination, date)
-            results_label = self.query_one("#results", Label)
+            departure = self.queryOne("#departure", Input).value
+            destination = self.queryOne("#destination", Input).value
+            date = self.queryOne("#date", Input).value
+            flights = dbManager.searchFlights(departure, destination, date)
+            results_label = self.queryOne("#results", Label)
 
             if not flights:
                 results_label.update("No flights found")
                 return
 
-            lines = []
-            for flight in flights:
-                lines.append(
-                    f"{flight.flightNumber}: {flight.departure} -> {flight.destination} "
-                    f"({flight.departureTime})"
-                )
-            results_label.update("\n".join(lines))
+            self.app.push_screen(SearchResultScreen(flights))
+
+class SearchResultScreen(Screen):
+    def __init__(self, flights):
+        super().__init__()
+        self.flights = flights
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Search Results ===", classes="title"),
+            Label("Select a flight to continue.", classes="subtitle"),
+            DataTable(id="flights_table"),
+            Button("Back", id="back")
+        )
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.queryOne(DataTable)
+        table.cursor_type = "row"
+        table.addColumns("Flight", "Departure", "Destination", "Time", "Price")
+        for flight in self.flights:
+            timeStr = f"{flight.departureTime[:16]} -> {flight.arrivalTime[-8:-3] if ' ' in flight.arrivalTime else flight.arrivalTime}"
+            table.add_row(
+                flight.flightNumber,
+                flight.departure,
+                flight.destination,
+                timeStr,
+                f"${flight.standardPrice}",
+                key=flight.flightID
+            )
+            
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        flightID = event.row_key.value
+        self.notify(f"Proceeding to book flight: {flightID}")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
 
 class MainMenu(Screen):
     def compose(self) -> ComposeResult:
@@ -543,8 +635,22 @@ class AeroFlow(App):
         width: 1fr;
         margin-right: 1;
     }
-    #dob_day {
+    #dobDay {
         margin-right: 0;
+    }
+    .autocomplete_list {
+        height: auto;
+        max-height: 5;
+        display: none;
+        border: solid round $primary;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    #flights_table {
+        height: auto;
+        max-height: 20;
+        margin-top: 1;
+        margin-bottom: 1;
     }
     """
 
