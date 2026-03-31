@@ -2,11 +2,12 @@ import secrets
 import os
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, Horizontal
-from textual.widgets import Header, Footer, Button, Label, Input, Select, OptionList, DataTable
+from textual.containers import Vertical, Horizontal, VerticalScroll
+from textual.widgets import Header, Footer, Button, Label, Input, Select, OptionList, DataTable, Checkbox
 from textual.screen import Screen
 import sqlite3
 from datetime import datetime
+from modules import DatePicker, hashPassword
 
 
 class User:
@@ -42,14 +43,29 @@ class SubPassenger:
 
 
 class Flight:
-    def __init__(self, flightNumber, departure, destination, departureTime, arrivalTime, classesAvailable, standardPrice, flightID=None):
+    def __init__(self, flightNumber, departure, destination, departureTime, arrivalTime, classesAvailable, standardPrice, classRatios=None, flightID=None):
         self.flightID = flightID
         self.flightNumber = flightNumber
         self.departure = departure
         self.destination = destination
         self.departureTime = departureTime
         self.arrivalTime = arrivalTime
-        self.classesAvailable = classesAvailable
+        normalizedRatios = {}
+        if classRatios is not None:
+            for className, ratio in classRatios.items():
+                normalizedName = str(className).strip().lower()
+                if not normalizedName:
+                    continue
+                normalizedRatios[normalizedName] = float(ratio)
+        else:
+            for className in classesAvailable:
+                normalizedName = str(className).strip().lower()
+                if not normalizedName:
+                    continue
+                ratio = defaultClasses.get(normalizedName, 1.0)
+                normalizedRatios[normalizedName] = float(ratio)
+        self.classRatios = normalizedRatios
+        self.classesAvailable = list(self.classRatios.keys())
         self.standardPrice = standardPrice
 
 
@@ -101,6 +117,7 @@ class DatabaseManager:
 
     def registerUser(self, user):
         normalizedEmail = user.email.strip().lower()
+        hashedPassword = hashPassword(user.password)
         with self.getConnection() as conn:
             existing = conn.execute(
                 "SELECT 1 FROM users WHERE email = ?",
@@ -119,7 +136,7 @@ class DatabaseManager:
                 (
                     user.userID,
                     normalizedEmail,
-                    user.password,
+                    hashedPassword,
                     user.firstName,
                     user.lastName,
                     user.gender,
@@ -129,11 +146,13 @@ class DatabaseManager:
                 )
             )
             conn.commit()
+        user.password = hashedPassword
         user.email = normalizedEmail
         return True, "User registered successfully"
 
     def authenticateUser(self, email, password):
         normalizedEmail = email.strip().lower()
+        hashedPassword = hashPassword(password)
         with self.getConnection() as conn:
             row = conn.execute(
                 "SELECT * FROM users WHERE email = ?",
@@ -142,7 +161,7 @@ class DatabaseManager:
 
         if row is None:
             return None, "Email not registered"
-        if row["password"] != password:
+        if row["password"] != hashedPassword:
             return None, "Wrong password"
 
         userClass = Admin if row["is_admin"] else Passenger
@@ -159,7 +178,7 @@ class DatabaseManager:
         return user, "Login successful"
 
     def newFlight(self, flight):
-        classesSerialized = ",".join(flight.classesAvailable)
+        classesSerialized = self.serializeClassRatios(flight.classRatios)
         with self.getConnection() as conn:
             conn.execute(
                 """
@@ -180,6 +199,31 @@ class DatabaseManager:
             )
             conn.commit()
 
+    def parseClassRatios(self, classesSerialized: str) -> dict[str, float]:
+        classRatios = {}
+        for rawItem in classesSerialized.split(","):
+            item = rawItem.strip()
+            if not item:
+                continue
+            if ":" in item:
+                className, ratioText = item.split(":", 1)
+                normalizedName = className.strip().lower()
+                try:
+                    ratio = float(ratioText.strip())
+                except ValueError:
+                    continue
+            else:
+                normalizedName = item.strip().lower()
+                ratio = defaultClasses.get(normalizedName)
+                if ratio is None:
+                    continue
+            if normalizedName:
+                classRatios[normalizedName] = ratio
+        return classRatios
+
+    def serializeClassRatios(self, classRatios: dict[str, float]) -> str:
+        return ",".join(f"{className}:{float(ratio):g}" for className, ratio in classRatios.items())
+
     def searchFlights(self, departure, destination, date):
         departure = departure.strip().lower()
         destination = destination.strip().lower()
@@ -199,7 +243,7 @@ class DatabaseManager:
 
         results = []
         for row in rows:
-            classesAvailable = [item.strip() for item in row["classes_available"].split(",") if item.strip()]
+            classRatios = self.parseClassRatios(row["classes_available"])
             results.append(
                 Flight(
                     flightNumber=row["flight_number"],
@@ -207,9 +251,10 @@ class DatabaseManager:
                     destination=row["destination"],
                     departureTime=row["departure_time"],
                     arrivalTime=row["arrival_time"],
-                    classesAvailable=classesAvailable,
+                    classesAvailable=list(classRatios.keys()),
+                    classRatios=classRatios,
                     standardPrice=row["standard_price"],
-                    flightID=row["flightID"],
+                    flightID=row["flight_id"],
                 )
             )
         return results
@@ -218,7 +263,7 @@ class DatabaseManager:
         with self.getConnection() as conn:
             conn.execute(
                 """
-                INSERT INTO bookings (booking_id, user_id, flightID, travel_class, price)
+                INSERT INTO bookings (booking_id, user_id, flight_id, travel_class, price)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
@@ -250,14 +295,27 @@ class DatabaseManager:
         with self.getConnection() as conn:
             rows = conn.execute(
                 """
-                  SELECT b.booking_id, b.user_id, b.flightID, b.travel_class, b.price,
+                  SELECT b.booking_id, b.user_id, b.flight_id, b.travel_class, b.price,
                       f.flight_number, f.departure, f.destination, f.departure_time, f.arrival_time
                 FROM bookings b
-                  JOIN flights f ON b.flightID = f.flightID
+                  JOIN flights f ON b.flight_id = f.flight_id
                   WHERE b.user_id = ?
                   ORDER BY f.departure_time ASC
                 """,
                 (userID,)
+            ).fetchall()
+        return rows
+
+    def fetchSubPassengersByBooking(self, bookingID):
+        with self.getConnection() as conn:
+            rows = conn.execute(
+                """
+                SELECT first_name, last_name, gender, nationality, date_of_birth
+                FROM sub_passengers
+                WHERE booking_id = ?
+                ORDER BY id ASC
+                """,
+                (bookingID,)
             ).fetchall()
         return rows
 
@@ -273,11 +331,12 @@ class DatabaseManager:
         columnName = allowedFields.get(updateField)
         if not columnName:
             return False, "Invalid profile field"
+        valueToSave = hashPassword(newInfo) if updateField == "password" else newInfo
 
         with self.getConnection() as conn:
             conn.execute(
                 f"UPDATE users SET {columnName} = ? WHERE user_id = ?",
-                (newInfo, userID)
+                (valueToSave, userID)
             )
             conn.commit()
         return True, "Profile updated"
@@ -359,12 +418,79 @@ class LoginScreen(Screen):
             if user is None:
                 self.notify(message, severity="error")
                 return
+            self.app.currentUser = user
             self.notify(f"{message}: {user.firstName} {user.lastName}")
             self.app.pop_screen()
             if user.isAdmin:
                 self.app.push_screen(AdminDashboardScreen(user))
             else:
                 self.app.push_screen(PassengerDashboardScreen(user))
+
+
+class UpdateProfileScreen(Screen):
+    def __init__(self, user: User):
+        super().__init__()
+        self.user = user
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Update Profile ===", classes="title"),
+            Input(value=self.user.firstName, placeholder="First name", id="firstName"),
+            Input(value=self.user.lastName, placeholder="Last name", id="lastName"),
+            Input(placeholder="Password", password=True, id="password"),
+            Input(value=self.user.gender, placeholder="Gender", id="gender"),
+            Input(value=self.user.nationality, placeholder="Nationality", id="nationality"),
+            Label("Date of birth", classes="field_label"),
+            DatePicker(id="dobRow", defaultDate=self.user.dateOfBirth),
+            Button("Save Changes", id="save", variant="primary"),
+            Button("Back", id="back")
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
+        elif event.button.id == "save":
+            firstName = self.query_one("#firstName", Input).value.strip()
+            lastName = self.query_one("#lastName", Input).value.strip()
+            password = self.query_one("#password", Input).value
+            gender = self.query_one("#gender", Input).value.strip()
+            nationality = self.query_one("#nationality", Input).value.strip()
+            dateOfBirth = self.query_one("#dobRow", DatePicker).value
+
+            requiredValues = [firstName, lastName, password, gender, nationality, dateOfBirth]
+            if any(not value for value in requiredValues):
+                self.notify("All fields are required.", severity="error")
+                return
+
+            if firstName != self.user.firstName:
+                dbManager.updateProfile(self.user.userID, "firstName", firstName)
+                self.user.firstName = firstName
+            if lastName != self.user.lastName:
+                dbManager.updateProfile(self.user.userID, "lastName", lastName)
+                self.user.lastName = lastName
+            hashedPassword = hashPassword(password)
+            if hashedPassword != self.user.password:
+                dbManager.updateProfile(self.user.userID, "password", password)
+                self.user.password = hashedPassword
+            if gender != self.user.gender:
+                dbManager.updateProfile(self.user.userID, "gender", gender)
+                self.user.gender = gender
+            if nationality != self.user.nationality:
+                dbManager.updateProfile(self.user.userID, "nationality", nationality)
+                self.user.nationality = nationality
+            if dateOfBirth != self.user.dateOfBirth:
+                dbManager.updateProfile(self.user.userID, "dateOfBirth", dateOfBirth)
+                self.user.dateOfBirth = dateOfBirth
+
+            self.notify("Profile updated successfully!", severity="information")
+            self.app.pop_screen()
+            
+            dashboard = self.app.screen
+            if isinstance(dashboard, PassengerDashboardScreen):
+                welcomeLabel = dashboard.query_one("#welcomeLabel", Label)
+                welcomeLabel.update(f"Welcome, {self.user.firstName} {self.user.lastName}")
 
 
 class PassengerDashboardScreen(Screen):
@@ -376,14 +502,154 @@ class PassengerDashboardScreen(Screen):
         yield Header()
         yield Vertical(
             Label("=== Passenger Dashboard ===", classes="title"),
-            Label(f"Welcome, {self.user.firstName} {self.user.lastName}", classes="subtitle"),
+            Label(f"Welcome, {self.user.firstName} {self.user.lastName}", id="welcomeLabel", classes="subtitle"),
+            Button("Book Flight", id="bookFlight", variant="primary"),
+            Button("Manage Bookings", id="manageBookings"),
+            Button("Update Profile", id="updateProfile"),
             Button("Logout", id="logout", variant="error")
         )
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "logout":
+            self.app.currentUser = None
             self.notify("Logged out")
+            self.app.pop_screen()
+        elif event.button.id == "bookFlight":
+            self.app.push_screen(FindFlightsScreen())
+        elif event.button.id == "updateProfile":
+            self.app.push_screen(UpdateProfileScreen(self.user))
+        elif event.button.id == "manageBookings":
+            self.app.push_screen(ManageBookingsScreen(self.user))
+
+class ManageBookingsScreen(Screen):
+    def __init__(self, user: User):
+        super().__init__()
+        self.user = user
+        self.bookingMap = {}
+
+    def bookingSummaryText(self, booking):
+        className = str(booking["travel_class"]).replace("_", " ").title()
+        departureTime = str(booking["departure_time"])[:16]
+        return f"{booking['flight_number']} | {booking['departure']} -> {booking['destination']} | {departureTime} | {className} | ${float(booking['price']):.2f}"
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Manage Bookings ===", classes="title"),
+            Label("Select a booking to view details.", classes="subtitle"),
+            VerticalScroll(
+                Vertical(id="bookingList"),
+                id="bookingListScroll"
+            ),
+            Button("Back", id="back")
+        )
+        yield Footer()
+
+    def on_mount(self) -> None:
+        bookings = dbManager.fetchUserBookings(self.user.userID)
+        bookingList = self.query_one("#bookingList", Vertical)
+        if not bookings:
+            bookingList.mount(Label("No bookings found.", classes="subtitle"))
+            return
+
+        for booking in bookings:
+            bookingID = str(booking["booking_id"])
+            self.bookingMap[bookingID] = booking
+            bookingList.mount(
+                Button(
+                    self.bookingSummaryText(booking),
+                    id=f"booking_{bookingID}"
+                )
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
+            return
+        if not event.button.id or not event.button.id.startswith("booking_"):
+            return
+        bookingID = event.button.id.replace("booking_", "", 1)
+        selectedBooking = self.bookingMap.get(bookingID)
+        if selectedBooking is None:
+            self.notify("Booking not found.", severity="error")
+            return
+        self.app.push_screen(BookingDetailScreen(selectedBooking))
+
+class BookingDetailScreen(Screen):
+    def __init__(self, booking):
+        super().__init__()
+        self.booking = booking
+
+    def compose(self) -> ComposeResult:
+        className = str(self.booking["travel_class"]).replace("_", " ").title()
+        yield Header()
+        yield Vertical(
+            Label("=== Booking Details ===", classes="title"),
+            VerticalScroll(
+                Horizontal(
+                    Label("Booking ID", classes="detailHeader"),
+                    Label(str(self.booking["booking_id"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Flight Number", classes="detailHeader"),
+                    Label(str(self.booking["flight_number"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Departure", classes="detailHeader"),
+                    Label(str(self.booking["departure"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Destination", classes="detailHeader"),
+                    Label(str(self.booking["destination"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Date Time of Takeoff", classes="detailHeader"),
+                    Label(str(self.booking["departure_time"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Date Time of Landing", classes="detailHeader"),
+                    Label(str(self.booking["arrival_time"]), classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Travel Class", classes="detailHeader"),
+                    Label(className, classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Horizontal(
+                    Label("Total Price", classes="detailHeader"),
+                    Label(f"${float(self.booking['price']):.2f}", classes="detailValue"),
+                    classes="detailRow"
+                ),
+                Label("Sub Passengers (if any): ", classes="field_label"),
+                Vertical(id="subPassengerList"),
+                id="bookingDetailScroll"
+            ),
+            Button("Back", id="back")
+        )
+        yield Footer()
+
+    def on_mount(self) -> None:
+        subPassengers = dbManager.fetchSubPassengersByBooking(self.booking["booking_id"])
+        subPassengerList = self.query_one("#subPassengerList", Vertical)
+        if not subPassengers:
+            subPassengerList.mount(Label("No sub passengers.", classes="subtitle"))
+            return
+        for index, sub in enumerate(subPassengers, start=1):
+            subPassengerList.mount(
+                Label(
+                    f"{index}. {sub['first_name']} {sub['last_name']} | {sub['gender']} | {sub['nationality']} | {sub['date_of_birth']}"
+                )
+            )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
             self.app.pop_screen()
 
 class AdminDashboardScreen(Screen):
@@ -402,89 +668,9 @@ class AdminDashboardScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "logout":
+            self.app.currentUser = None
             self.notify("Logged out")
             self.app.pop_screen()
-
-class DatePicker(Horizontal):
-    MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",]
-
-    def __init__(self, id: str = None, classes: str = None, defaultDate: str = ""):
-        super().__init__(id=id, classes=classes)
-        if defaultDate:
-            try:
-                dt = datetime.strptime(defaultDate, "%Y-%m-%d")
-            except ValueError:
-                dt = datetime.now()
-        else:
-            dt = datetime.now()
-            
-        self.default_year = str(dt.year)
-        self.default_month = f"{dt.month:02d}"
-        self.default_day = f"{dt.day:02d}"
-
-    def yearOptions(self):
-        currentYear = datetime.now().year
-        return [(str(year), str(year)) for year in range(currentYear - 100, currentYear + 10)]
-
-    def monthOptions(self):
-        return [(f"{name}", f"{month:02d}") for month, name in enumerate(self.MONTH_NAMES, start=1)]
-
-    def isLeapYear(self, year: int) -> bool:
-        return (year % 400 == 0) or (year % 4 == 0 and year % 100 != 0)
-
-    def daysInMonth(self, year: int, month: int) -> int:
-        if month in (1, 3, 5, 7, 8, 10, 12):
-            return 31
-        if month in (4, 6, 9, 11):
-            return 30
-        return 29 if self.isLeapYear(year) else 28
-
-    def dayOptions(self, year: int, month: int):
-        return [(f"{day:02d}", f"{day:02d}") for day in range(1, self.daysInMonth(year, month) + 1)]
-
-    def selectedYearMonth(self) -> tuple[int, int]:
-        yearSelect = self.query_one(".year-select", Select)
-        monthSelect = self.query_one(".month-select", Select)
-
-        yearValue = yearSelect.value
-        monthValue = monthSelect.value
-
-        year = int(yearValue) if yearValue != Select.BLANK else int(self.default_year)
-        month = int(monthValue) if monthValue != Select.BLANK else int(self.default_month)
-        return year, month
-
-    def updateDayOptions(self):
-        day_select = self.query_one(".day-select", Select)
-        current_day = day_select.value
-        year, month = self.selectedYearMonth()
-        max_day = self.daysInMonth(year, month)
-        day_select.set_options(self.dayOptions(year, month))
-
-        if current_day != Select.BLANK:
-            clamped_day = min(int(current_day), max_day)
-            day_select.value = f"{clamped_day:02d}"
-
-    def compose(self) -> ComposeResult:
-        yield Select(self.yearOptions(), prompt="Year", classes="dob_picker year-select", allow_blank=False, value=self.default_year)
-        yield Select(self.monthOptions(), prompt="Month", classes="dob_picker month-select", allow_blank=False, value=self.default_month)
-        yield Select(self.dayOptions(int(self.default_year), int(self.default_month)), prompt="Day", classes="dob_picker day-select", allow_blank=False, value=self.default_day)
-
-    def on_mount(self) -> None:
-        self.updateDayOptions()
-
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.has_class("year-select") or event.select.has_class("month-select"):
-            self.updateDayOptions()
-
-    @property
-    def value(self):
-        year = self.query_one(".year-select", Select).value
-        month = self.query_one(".month-select", Select).value
-        day = self.query_one(".day-select", Select).value
-        if year == Select.BLANK or month == Select.BLANK or day == Select.BLANK:
-            return None
-        return f"{year}-{month}-{day}"
-
 
 class RegisterScreen(Screen):
     def compose(self) -> ComposeResult:
@@ -594,7 +780,7 @@ class FindFlightsScreen(Screen):
         elif event.option_list.id == "destination_list":
             self.query_one("#destination", Input).value = str(event.option.prompt)
             event.option_list.display = False
-            self.query_one("#date", Input).focus()
+            self.query_one("#date", DatePicker).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
@@ -621,6 +807,22 @@ class SearchResultScreen(Screen):
     def __init__(self, flights):
         super().__init__()
         self.flights = flights
+        self.lastSelectedFlightID = None
+        self.lastSelectedTime = None
+
+    def getFlightByID(self, flightID):
+        for flight in self.flights:
+            if str(flight.flightID) == str(flightID):
+                return flight
+        return None
+
+    def classPriceText(self, flight: Flight, className: str) -> str:
+        normalizedClassName = className.strip().lower()
+        ratio = flight.classRatios.get(normalizedClassName)
+        if ratio is None:
+            return "N/A"
+        price = float(flight.standardPrice) * ratio
+        return f"${price:.2f}"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -635,21 +837,50 @@ class SearchResultScreen(Screen):
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         table.cursor_type = "row"
-        table.addColumns("Flight", "Departure", "Destination", "Time", "Price")
+        table.add_columns(
+            "Flight Number",
+            "Departure",
+            "Destination",
+            "Date Time of Takeoff",
+            "Date Time of Landing",
+            "Economy",
+            "Premium Economy",
+            "Business",
+            "First",
+        )
         for flight in self.flights:
-            timeStr = f"{flight.departureTime[:16]} -> {flight.arrivalTime[-8:-3] if ' ' in flight.arrivalTime else flight.arrivalTime}"
             table.add_row(
                 flight.flightNumber,
                 flight.departure,
                 flight.destination,
-                timeStr,
-                f"${flight.standardPrice}",
+                flight.departureTime,
+                flight.arrivalTime,
+                self.classPriceText(flight, "economy"),
+                self.classPriceText(flight, "premium_economy"),
+                self.classPriceText(flight, "business"),
+                self.classPriceText(flight, "first"),
                 key=flight.flightID
             )
             
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         flightID = event.row_key.value
-        self.notify(f"Proceeding to book flight: {flightID}")
+        nowTime = datetime.now()
+        if self.lastSelectedFlightID == flightID and self.lastSelectedTime and (nowTime - self.lastSelectedTime).total_seconds() <= 0.6:
+            selectedFlight = self.getFlightByID(flightID)
+            if selectedFlight is None:
+                self.notify("Selected flight not found.", severity="error")
+                return
+            if self.app.currentUser is None:
+                self.notify("Please login before booking.", severity="warning")
+                self.app.push_screen(LoginScreen())
+                return
+            self.app.push_screen(BookingScreen(self.app.currentUser, selectedFlight))
+            self.lastSelectedFlightID = None
+            self.lastSelectedTime = None
+            return
+        self.lastSelectedFlightID = flightID
+        self.lastSelectedTime = nowTime
+        self.notify("Double click row to book this flight.")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
@@ -677,6 +908,249 @@ class MainMenu(Screen):
             self.app.push_screen(FindFlightsScreen())
         elif event.button.id == "exit":
             self.app.exit()
+
+class BookingScreen(Screen):
+    def __init__(self, user: User, flight: Flight):
+        super().__init__()
+        self.user = user
+        self.flight = flight
+        self.subPassengerCount = 0
+
+    def classOptions(self):
+        optionLabels = {
+            "economy": "Economy",
+            "premium_economy": "Premium Economy",
+            "business": "Business",
+            "first": "First",
+        }
+        options = []
+        for className in self.flight.classesAvailable:
+            ratio = self.flight.classRatios.get(className)
+            if ratio is None:
+                continue
+            price = float(self.flight.standardPrice) * ratio
+            label = optionLabels.get(className, className.replace("_", " ").title())
+            options.append((f"{label} (${price:.2f})", className))
+        return options
+
+    def on_mount(self) -> None:
+        self.updateSubPassengerVisibility()
+
+    def updateSubPassengerVisibility(self):
+        counterLabel = self.query_one("#subPassengerCountLabel", Label)
+        counterLabel.update(str(self.subPassengerCount))
+        for index in range(1, 5):
+            group = self.query_one(f"#subPassenger{index}Group", Vertical)
+            group.display = index <= self.subPassengerCount
+
+    def compose(self) -> ComposeResult:
+        classOptions = self.classOptions()
+        defaultClass = classOptions[0][1] if classOptions else Select.BLANK
+        yield Header()
+        yield Vertical(
+            VerticalScroll(
+                Label("=== Flight Booking ===", classes="title"),
+                Label(f"Flight: {self.flight.flightNumber}", classes="subtitle"),
+                Label(f"Route: {self.flight.departure} -> {self.flight.destination}"),
+                Label(f"Primary Passenger: {self.user.firstName} {self.user.lastName}"),
+                Label("Travel Class (same for all passengers)", classes="field_label"),
+                Select(classOptions, id="travelClass", allow_blank=False, value=defaultClass),
+                Label("Number of Sub Passengers", classes="field_label"),
+                Horizontal(
+                    Button("-", id="decreaseSubPassenger", classes="counterButton"),
+                    Button("+", id="increaseSubPassenger", classes="counterButton"),
+                    Label("0", id="subPassengerCountLabel", classes="subtitle"),
+                    id="subPassengerCounter"
+                ),
+                Vertical(
+                    Label("Sub Passenger 1", classes="field_label"),
+                    Input(placeholder="First name", id="sub1FirstName"),
+                    Input(placeholder="Last name", id="sub1LastName"),
+                    Input(placeholder="Gender", id="sub1Gender"),
+                    Input(placeholder="Nationality", id="sub1Nationality"),
+                    DatePicker(id="sub1Dob"),
+                    id="subPassenger1Group"
+                ),
+                Vertical(
+                    Label("Sub Passenger 2", classes="field_label"),
+                    Input(placeholder="First name", id="sub2FirstName"),
+                    Input(placeholder="Last name", id="sub2LastName"),
+                    Input(placeholder="Gender", id="sub2Gender"),
+                    Input(placeholder="Nationality", id="sub2Nationality"),
+                    DatePicker(id="sub2Dob"),
+                    id="subPassenger2Group"
+                ),
+                Vertical(
+                    Label("Sub Passenger 3", classes="field_label"),
+                    Input(placeholder="First name", id="sub3FirstName"),
+                    Input(placeholder="Last name", id="sub3LastName"),
+                    Input(placeholder="Gender", id="sub3Gender"),
+                    Input(placeholder="Nationality", id="sub3Nationality"),
+                    DatePicker(id="sub3Dob"),
+                    id="subPassenger3Group"
+                ),
+                Vertical(
+                    Label("Sub Passenger 4", classes="field_label"),
+                    Input(placeholder="First name", id="sub4FirstName"),
+                    Input(placeholder="Last name", id="sub4LastName"),
+                    Input(placeholder="Gender", id="sub4Gender"),
+                    Input(placeholder="Nationality", id="sub4Nationality"),
+                    DatePicker(id="sub4Dob"),
+                    id="subPassenger4Group"
+                ),
+                Checkbox("I agree to the Terms and Conditions", id="agreeTerms"),
+                Button("Confirm and Proceed to Payment", id="confirmBooking", variant="primary"),
+                Button("Back", id="back"),
+                id="bookingForm"
+            )
+        )
+        yield Footer()
+
+    def subPassengerFromIndex(self, passengerIndex: int):
+        firstName = self.query_one(f"#sub{passengerIndex}FirstName", Input).value.strip()
+        lastName = self.query_one(f"#sub{passengerIndex}LastName", Input).value.strip()
+        gender = self.query_one(f"#sub{passengerIndex}Gender", Input).value.strip()
+        nationality = self.query_one(f"#sub{passengerIndex}Nationality", Input).value.strip()
+        dateOfBirth = self.query_one(f"#sub{passengerIndex}Dob", DatePicker).value
+        requiredValues = [firstName, lastName, gender, nationality, dateOfBirth]
+        if any(not value for value in requiredValues):
+            return None
+        return SubPassenger(firstName, lastName, gender, nationality, dateOfBirth)
+
+    def bookingTotalPrice(self, travelClass: str, passengerCount: int):
+        ratio = self.flight.classRatios.get(travelClass)
+        if ratio is None:
+            return None
+        return float(self.flight.standardPrice) * float(ratio) * passengerCount
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "increaseSubPassenger":
+            if self.subPassengerCount < 4:
+                self.subPassengerCount += 1
+                self.updateSubPassengerVisibility()
+            return
+        if event.button.id == "decreaseSubPassenger":
+            if self.subPassengerCount > 0:
+                self.subPassengerCount -= 1
+                self.updateSubPassengerVisibility()
+            return
+        if event.button.id == "back":
+            self.app.pop_screen()
+            return
+        if event.button.id != "confirmBooking":
+            return
+
+        travelClass = self.query_one("#travelClass", Select).value
+        agreedTerms = self.query_one("#agreeTerms", Checkbox).value
+
+        if travelClass == Select.BLANK:
+            self.notify("Please select a travel class.", severity="warning")
+            return
+        if not agreedTerms:
+            self.notify("You must agree to the Terms and Conditions.", severity="warning")
+            return
+
+        subPassengers = []
+        for index in range(1, self.subPassengerCount + 1):
+            subPassenger = self.subPassengerFromIndex(index)
+            if subPassenger is None:
+                self.notify(f"Please complete Sub Passenger {index} details.", severity="warning")
+                return
+            subPassengers.append(subPassenger)
+
+        totalPassengers = 1 + len(subPassengers)
+        totalPrice = self.bookingTotalPrice(str(travelClass), totalPassengers)
+        if totalPrice is None:
+            self.notify("Selected class is not available.", severity="error")
+            return
+
+        booking = Booking(
+            userID=self.user.userID,
+            flightID=self.flight.flightID,
+            travel_class=str(travelClass),
+            price=totalPrice,
+            sub_passengers=subPassengers,
+        )
+        self.app.push_screen(PaymentScreen(booking))
+
+class PaymentScreen(Screen):
+    def __init__(self, booking: Booking):
+        super().__init__()
+        self.booking = booking
+        self.countdownSeconds = 5
+        self.paymentTimer = None
+        self.paymentCompleted = False
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Vertical(
+            Label("=== Payment ===", classes="title"),
+            Label(f"Booking ID: {self.booking.bookingID}"),
+            Label(f"Total Amount: ${float(self.booking.price):.2f}", classes="subtitle"),
+            Label("", id="paymentStatusLabel"),
+            Button("Confirm Payment", id="confirmPayment", variant="primary"),
+            Button("Back", id="back"),
+            Button("Finish", id="finish", variant="success")
+        )
+        yield Footer()
+
+    def on_mount(self) -> None:
+        finishButton = self.query_one("#finish", Button)
+        finishButton.display = False
+
+    def returnToDashboard(self):
+        if self.app.currentUser and self.app.currentUser.isAdmin:
+            self.app.push_screen(AdminDashboardScreen(self.app.currentUser))
+            return
+        if self.app.currentUser:
+            self.app.push_screen(PassengerDashboardScreen(self.app.currentUser))
+            return
+        self.app.push_screen(MainMenu())
+
+    def completePayment(self):
+        if self.paymentCompleted:
+            return
+        self.paymentCompleted = True
+        dbManager.createBooking(self.booking)
+        statusLabel = self.query_one("#paymentStatusLabel", Label)
+        statusLabel.update("Payment Successful")
+        statusLabel.styles.color = "green"
+        confirmButton = self.query_one("#confirmPayment", Button)
+        backButton = self.query_one("#back", Button)
+        finishButton = self.query_one("#finish", Button)
+        confirmButton.display = False
+        backButton.display = False
+        finishButton.display = True
+        self.notify("Booking created successfully.", severity="information")
+
+    def processPaymentTick(self):
+        statusLabel = self.query_one("#paymentStatusLabel", Label)
+        if self.countdownSeconds > 0:
+            statusLabel.update(f"Processing Payment, Please wait ({self.countdownSeconds})")
+            self.countdownSeconds -= 1
+            return
+        if self.paymentTimer is not None:
+            self.paymentTimer.stop()
+            self.paymentTimer = None
+        self.completePayment()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "finish":
+            self.returnToDashboard()
+            return
+        if event.button.id == "back":
+            self.app.pop_screen()
+            return
+        if event.button.id != "confirmPayment":
+            return
+        if self.paymentCompleted:
+            return
+        if self.paymentTimer is not None:
+            return
+        confirmButton = self.query_one("#confirmPayment", Button)
+        confirmButton.disabled = True
+        self.processPaymentTick()
+        self.paymentTimer = self.set_interval(1, self.processPaymentTick)
 
 class AeroFlow(App):
     CSS = """
@@ -728,9 +1202,39 @@ class AeroFlow(App):
         margin-top: 1;
         margin-bottom: 1;
     }
+    #bookingForm {
+        height: 1fr;
+        width: 100%;
+    }
+    #subPassengerCounter {
+        height: auto;
+        width: 100%;
+        align: center middle;
+    }
+    #subPassengerCounter Button {
+        width: 8;
+        margin-right: 1;
+    }
+    .counterButton {
+        width: 8 !important;
+        margin-top: 0;
+    }
+    .detailRow {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
+    .detailHeader {
+        width: 22;
+        text-style: bold;
+    }
+    .detailValue {
+        width: 1fr;
+    }
     """
 
     def on_mount(self) -> None:
+        self.currentUser = None
         self.push_screen(MainMenu())
 
 if __name__ == "__main__":

@@ -69,7 +69,7 @@ demo_users = [
     (
         'admin',
         'admin@aeroflow.com',
-        '12345678',
+        'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f',
         'System',
         'Admin',
         'Prefer not to say',
@@ -80,7 +80,7 @@ demo_users = [
     (
         'demouser1',
         'johndoe@me.com',
-        '12345678',
+        'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f',
         'John',
         'Doe',
         'M',
@@ -91,7 +91,7 @@ demo_users = [
     (
         'demouser2',
         'andywong@gmail.com',
-        '12345678',
+        'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f',
         'Andy',
         'Wong',
         'M',
@@ -118,7 +118,7 @@ demo_flights = [
         'Tokyo Narita (NRT)',
         '2026-04-13 01:15',
         '2026-04-13 05:45',
-        'economy,premium_economy',
+        'economy:1,premium_economy:2.2',
         1350.0,
     ),
     (
@@ -127,7 +127,7 @@ demo_flights = [
         'Hong Kong (HKG)',
         '2026-04-13 21:35',
         '2026-04-14 00:30',
-        'economy,premium_economy,business',
+        'economy:1,premium_economy:2.2,business:3',
         1350.0,
     ),
     (
@@ -136,7 +136,7 @@ demo_flights = [
         'Tokyo Narita (NRT)',
         '2026-04-14 01:15',
         '2026-04-14 05:45',
-        'economy,premium_economy',
+        'economy:1,premium_economy:2.2',
         1350.0,
     ),
     (
@@ -145,7 +145,7 @@ demo_flights = [
         'Hong Kong (HKG)',
         '2026-04-14 21:35',
         '2026-04-15 00:30',
-        'economy,premium_economy,business',
+        'economy:1,premium_economy:2.2,business:3',
         1350.0,
     ),
 ]
