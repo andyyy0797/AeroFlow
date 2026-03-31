@@ -44,7 +44,7 @@ Links a specific user to a particular flight to record their reservation.
 ### `sub_passengers` Table
 Stores details of additional passengers included in a primary booking. A booking can have up to 4 sub-passengers (total 5 passengers per booking).
 * **`id`** (`INTEGER`, `PRIMARY KEY`, `AUTOINCREMENT`)
-* **`booking_id`** (`TEXT`, `NOT NULL`) - *Foreign Key referencing `bookings(booking_id)` (with `ON DELETE CASCADE`).*
+* **`booking_id`** (`TEXT`, `NOT NULL`) - *Foreign Key referencing `bookings(booking_id)`.*
 * **`first_name`** (`TEXT`, `NOT NULL`)
 * **`last_name`** (`TEXT`, `NOT NULL`)
 * **`gender`** (`TEXT`, `NOT NULL`)
