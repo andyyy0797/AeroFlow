@@ -11,6 +11,7 @@ cursor = db.cursor()
 cursor.execute('DROP TABLE IF EXISTS users')
 cursor.execute('DROP TABLE IF EXISTS flights')
 cursor.execute('DROP TABLE IF EXISTS bookings')
+cursor.execute('DROP TABLE IF EXISTS sub_passengers')
 
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
@@ -51,13 +52,20 @@ CREATE TABLE IF NOT EXISTS bookings (
 )
 ''')
 
-cursor.execute(
-    '''
-    INSERT INTO users (
-        user_id, email, password, first_name, last_name,
-        gender, nationality, date_of_birth, is_admin
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''',
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS sub_passengers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    gender TEXT NOT NULL,
+    nationality TEXT NOT NULL,
+    date_of_birth TEXT NOT NULL,
+    FOREIGN KEY (booking_id) REFERENCES bookings (booking_id) ON DELETE CASCADE
+)
+''')
+
+demo_users = [
     (
         'admin',
         'admin@aeroflow.com',
@@ -68,42 +76,83 @@ cursor.execute(
         'N/A',
         '1990-01-01',
         1,
-    )
-)
-
-demo_flights = [
-    (
-        'AF101',
-        'Hong Kong (HKG)',
-        'Tokyo, Japan (HND)',
-        '2026-04-10 08:30',
-        '2026-04-10 13:05',
-        'economy,premium_economy,business,first',
-        1280.0,
     ),
     (
-        'AF202',
-        'Hong Kong (HKG)',
-        'Singapore (SIA)',
-        '2026-04-11 09:15',
-        '2026-04-11 13:05',
-        'economy,premium_economy,business',
-        920.0,
+        'demouser1',
+        'johndoe@me.com',
+        '12345678',
+        'John',
+        'Doe',
+        'M',
+        'Hong Kong, China',
+        '1990-09-01',
+        0,
     ),
     (
-        'AF303',
-        'Hong Kong (HKG)',
-        'London (LHR)',
-        '2026-04-12 23:40',
-        '2026-04-13 06:25',
-        'economy,premium_economy,business,first',
-        4680.0,
+        'demouser2',
+        'andywong@gmail.com',
+        '12345678',
+        'Andy',
+        'Wong',
+        'M',
+        'Hong Kong, China',
+        '2007-01-30',
+        0,
     ),
 ]
 
 cursor.executemany(
     '''
-    INSERT INTO flights (
+    INSERT OR IGNORE INTO users (
+        user_id, email, password, first_name, last_name,
+        gender, nationality, date_of_birth, is_admin
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''',
+    demo_users,
+)
+
+demo_flights = [
+    (
+        'UO854',
+        'Hong Kong (HKG)',
+        'Tokyo Narita (NRT)',
+        '2026-04-13 01:15',
+        '2026-04-13 05:45',
+        'economy,premium_economy',
+        1350.0,
+    ),
+    (
+        'UO653',
+        'Tokyo Narita (NRT)',
+        'Hong Kong (HKG)',
+        '2026-04-13 21:35',
+        '2026-04-14 00:30',
+        'economy,premium_economy,business',
+        1350.0,
+    ),
+    (
+        'UO854',
+        'Hong Kong (HKG)',
+        'Tokyo Narita (NRT)',
+        '2026-04-14 01:15',
+        '2026-04-14 05:45',
+        'economy,premium_economy',
+        1350.0,
+    ),
+    (
+        'UO653',
+        'Tokyo Narita (NRT)',
+        'Hong Kong (HKG)',
+        '2026-04-14 21:35',
+        '2026-04-15 00:30',
+        'economy,premium_economy,business',
+        1350.0,
+    ),
+]
+
+cursor.executemany(
+    '''
+    INSERT OR IGNORE INTO flights (
         flight_number, departure, destination, departure_time,
         arrival_time, classes_available, standard_price
     ) VALUES (?, ?, ?, ?, ?, ?, ?)

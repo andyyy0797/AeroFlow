@@ -2,7 +2,7 @@
 
 ## Data Structure
 
-A SQLite database (`aeroflow.db`) was implemented in this project, it consists of three tables to manage **users**, **flights**, and **booking records**.
+A SQLite database (`aeroflow.db`) was implemented in this project, it consists of four tables to manage **users**, **flights**, **booking records**, and **sub-passengers**.
 
 ### `users` Table
 Stores user information, differentiating between **Admins** and **Passengers** using the `is_admin` column. Both roles use a generated hash as their primary identifier.
@@ -38,3 +38,15 @@ Links a specific user to a particular flight to record their reservation.
 * **`flight_id`** (`INTEGER`, `NOT NULL`) - *Foreign Key referencing `flights(id)`.*
 * **`travel_class`** (`TEXT`, `NOT NULL`)
 * **`price`** (`REAL`, `NOT NULL`)
+
+---
+
+### `sub_passengers` Table
+Stores details of additional passengers included in a primary booking. A booking can have up to 4 sub-passengers (total 5 passengers per booking).
+* **`id`** (`INTEGER`, `PRIMARY KEY`, `AUTOINCREMENT`)
+* **`booking_id`** (`TEXT`, `NOT NULL`) - *Foreign Key referencing `bookings(booking_id)` (with `ON DELETE CASCADE`).*
+* **`first_name`** (`TEXT`, `NOT NULL`)
+* **`last_name`** (`TEXT`, `NOT NULL`)
+* **`gender`** (`TEXT`, `NOT NULL`)
+* **`nationality`** (`TEXT`, `NOT NULL`)
+* **`date_of_birth`** (`TEXT`, `NOT NULL`)
