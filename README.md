@@ -11,7 +11,7 @@ Our team (Group 10) has developed an integrated aviation management solution tha
 ## Project Structure
 The project is divided into two primary tasks as per the course requirements:
 
-### ✈️ Task 1: OOP-Based Application Development (50%)
+### ✈️ Task 1: OOP-Based Application Development
 **AeroFlow** is a Python-based flight management system designed to solve complex logistics in the aviation industry. 
 
 * **Core Functions**:
@@ -19,16 +19,13 @@ The project is divided into two primary tasks as per the course requirements:
     * **Passenger Services**: User registration, seat booking, and ticket generation.
     * **Overbooking & Waitlist Mechanism**: A sophisticated system to handle overbooked flights using a **Queue** (FIFO) data structure for fair standby management.
 * **OOP Implementation**: 
-    * The application uses **Inheritance** (User types, Flight types), **Encapsulation** (Private attributes for seat counts and IDs), and **Polymorphism** (Dynamic pricing strategies).
-    * The project follows **Modular Programming** with code separated into multiple files (e.g., `main_app.py`, `models.py`, `logic_manager.py`).
+    * The application uses **Inheritance** (User class and Passenger Class), **Encapsulation**, and **Polymorphism** (Dynamic pricing strategies).
 
-### 📚 Task 2: Self-Study on Data Structure & Algorithm (50%)
+### 📚 Task 2: Self-Study on Data Structure & Algorithm
 This task focuses on the independent study of a data structure and an algorithm not covered in the standard course curriculum.
 
-* **New Data Structure**: [Insert your chosen DS, e.g., Graph/Heap].
-    * Includes an introduction to the Abstract Data Type (ADT) and its real-world applications.
-* **New Algorithm**: [Insert your chosen Algorithm, e.g., Dijkstra's/Heap Sort].
-    * Includes a detailed analysis of Time Complexity ($O$) and practical code implementation examples.
+* **New Data Structure**: 
+* **New Algorithm**: 
 
 ---
 
