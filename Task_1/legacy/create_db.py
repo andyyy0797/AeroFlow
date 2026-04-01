@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     flight_id INTEGER NOT NULL,
     travel_class TEXT NOT NULL,
     price REAL NOT NULL,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users (user_id),
     FOREIGN KEY (flight_id) REFERENCES flights (flight_id)
 )
