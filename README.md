@@ -24,8 +24,8 @@ The project is divided into two primary tasks as per the course requirements:
 ### 📚 Task 2: Self-Study on Data Structure & Algorithm
 This task focuses on the independent study of a data structure and an algorithm not covered in the standard course curriculum.
 
-* **New Data Structure**: 
-* **New Algorithm**: 
+* **New Data Structure**: Trie, _a specialized tree-based data structure_
+* **New Algorithm**: Counting Sort, _a non-comparison-based sorting algorithm_
 
 ---
 
