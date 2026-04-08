@@ -2,13 +2,13 @@
 
 ## 1) Project Introduction
 
-Task 2 is a terminal-based demo program built on AeroFlow mock booking data.
+Task 2 is a terminal-based program built on AeroFlow format mock booking data.
 It demonstrates:
 
-- **Data Structure:** Trie (for fast email prefix search)
+- **Data Structure:** Trie (for fast prefix search)
 - **Algorithm:** Counting Sort (for integer price sorting)
 
-The program reads `mockBookings.json`, builds an email Trie index, and provides an interactive menu.
+The program reads `mockBookings.json`, builds two Tries with email and destination as index, and provides an interactive menu.
 
 ## 2) Project Structure
 
@@ -18,11 +18,10 @@ The program reads `mockBookings.json`, builds an email Trie index, and provides 
 
 ## 3) Core Features
 
-### 3.1 Search Booking by Email (By Trie)
+### 3.1.1 Search Booking by Email (By Trie)
 
 - Builds Trie index using `user_email`
 - Supports email prefix search
-- Results shown in Rich table
 - Shows key booking fields:
   - Booking ID
   - Email
@@ -31,10 +30,19 @@ The program reads `mockBookings.json`, builds an email Trie index, and provides 
   - Class
   - Total Price
   - Sub passenger count
-- Pagination:
-  - 10 records per page
-  - Left/Right arrow keys to change pages
-  - Shows current page and total pages
+
+### 3.1.2 Search Booking by Destination (By Trie)
+
+- Builds Trie index using `destination`
+- Supports destination prefix search
+- Shows key booking fields:
+  - Booking ID
+  - Email
+  - Destination
+  - Departure
+  - Class
+  - Total Price
+  - Sub passenger count
 
 ### 3.2 Run Demo (By Trie + Count Sort)
 
@@ -44,8 +52,8 @@ The program reads `mockBookings.json`, builds an email Trie index, and provides 
   - Top 3 cheapest bookings (sorted by `totalPrice`)
 - Layout uses fixed two-column view:
   - Left: Prefix Result
-  - Right: Top 3 Cheapest
-- If no matched records, layout remains aligned and stable (`N/A` and placeholder rows)
+  - Right: Top 3 Cheapest Bookings
+- If no matched records were found, layout remains aligned and stable (`N/A` and placeholder rows)
 
 ### 3.3 Sort All Orders by Total Price (By Count Sort)
 
@@ -56,8 +64,8 @@ The program reads `mockBookings.json`, builds an email Trie index, and provides 
   - Highest price
   - Average price
 - Shows two ranking tables:
-  - Top 10 cheapest
-  - Top 10 highest
+  - Top 10 cheapest bookings
+  - Top 10 highest bookings
 
 ## 4) How It Works
 
@@ -128,19 +136,21 @@ After launch, you will see a interactive menu like this:
 ==================== Efficient Analysis Toolbox ====================
 
 1. Search Booking by Email        [Trie]
-2. Run Demo                       [Trie] [Count Sort]
-3. Sort All Orders by Total Price        [Count Sort]
-4. Exit
+2. Search Booking by Destination  [Trie]
+3. Run Demo                       [Trie] [Count Sort]
+4. Sort All Orders by Total Price        [Count Sort]
+5. Exit
 ```
 
 You may choose from the following options:
 
 - `1` Search Booking by Email
-- `2` Run Demo
-- `3` Sort All Orders by Total Price
-- `4` Exit
+- `2` Search Booking by Destination
+- `3` Run Demo
+- `4` Sort All Orders by Total Price
+- `5` Exit
 
-For browsing search result from function `1`, you may use the following keys to manipulate:
+For browsing search result from function `1` and `2`, you may use the following keys to manipulate:
 
 - `←` previous page
 - `→` next page

@@ -29,7 +29,7 @@ pip install uv
 Step 0 (Optional): Execute these two commands to initialize the SQLite database with preset demo data:
 
 ```bash
-uv run python legacy/create_db.py
+uv run python tools/create_db.py
 ```
 
 Step 1: Execute this command to install all required dependencies with `uv`:

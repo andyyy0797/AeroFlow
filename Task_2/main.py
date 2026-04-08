@@ -69,6 +69,114 @@ def loadJsonData():
     return data
 
 
+def collectUniqueValues(jsonData, keyPath):
+    uniqueValues = set()
+    for record in jsonData:
+        value = getNestedValue(record, keyPath)
+        if isinstance(value, str) and value.strip():
+            uniqueValues.add(value.strip())
+    return sorted(uniqueValues, key=str.lower)
+
+
+def readAutocompleteKey():
+    if os.name == "nt":
+        import msvcrt
+
+        key = msvcrt.getwch()
+        if key in ("\r", "\n"):
+            return "enter", ""
+        if key in ("\b", "\x7f"):
+            return "backspace", ""
+        if key == "\x03":
+            return "cancel", ""
+        if key in ("\x00", "\xe0"):
+            specialKey = msvcrt.getwch()
+            if specialKey == "K":
+                return "left", ""
+            if specialKey == "M":
+                return "right", ""
+            return "ignore", ""
+        if key in ("q", "Q"):
+            return "exit", ""
+        return "char", key
+
+    import termios
+    import tty
+
+    fileDescriptor = sys.stdin.fileno()
+    oldSettings = termios.tcgetattr(fileDescriptor)
+    try:
+        tty.setraw(fileDescriptor)
+        key = sys.stdin.read(1)
+        if key in ("\r", "\n"):
+            return "enter", ""
+        if key in ("\x08", "\x7f"):
+            return "backspace", ""
+        if key == "\x03":
+            return "cancel", ""
+        if key == "\x1b":
+            nextOne = sys.stdin.read(1)
+            if nextOne == "[":
+                nextTwo = sys.stdin.read(1)
+                if nextTwo == "D":
+                    return "left", ""
+                if nextTwo == "C":
+                    return "right", ""
+            return "ignore", ""
+        if key in ("q", "Q"):
+            return "exit", ""
+        return "char", key
+    finally:
+        termios.tcsetattr(fileDescriptor, termios.TCSADRAIN, oldSettings)
+
+
+def liveDestinationPrefixSearch(prompt, destinationTrie):
+    if not sys.stdin.isatty():
+        keyword = input(prompt).strip()
+        return keyword, destinationTrie.findByPrefix(keyword.lower())
+
+    console = Console()
+    userInput = ""
+    currentPage = 0
+    pageSize = 10
+    while True:
+        clearConsole()
+        printLogo()
+        print("Live prefix search: type destination keyword, use LEFT/RIGHT to change page.")
+        print(f"{prompt}{userInput}")
+
+        matchedRecords = destinationTrie.findByPrefix(userInput.lower()) if userInput else []
+        if not userInput:
+            console.print(Panel("Start typing to see matched bookings by destination prefix.", border_style="blue"))
+        elif not matchedRecords:
+            console.print(Panel("No bookings match this destination prefix.", border_style="yellow"))
+        else:
+            totalPages = math.ceil(len(matchedRecords) / pageSize)
+            if currentPage >= totalPages:
+                currentPage = totalPages - 1
+            table = bookingTablePage(matchedRecords, currentPage, pageSize, userInput)
+            table.title = f"Live Matched Bookings by Destination Prefix: '{userInput}'"
+            console.print(table)
+            print(f"Page {currentPage + 1}/{totalPages} | Total matched: {len(matchedRecords)}")
+            print("LEFT/RIGHT: switch page | Type: update prefix | Enter/Q: return menu")
+
+        keyType, keyValue = readAutocompleteKey()
+        if keyType in ("enter", "exit", "cancel"):
+            return
+        if keyType == "left" and matchedRecords and currentPage > 0:
+            currentPage -= 1
+        elif keyType == "right" and matchedRecords:
+            totalPages = math.ceil(len(matchedRecords) / pageSize)
+            if currentPage < totalPages - 1:
+                currentPage += 1
+        if keyType == "backspace":
+            userInput = userInput[:-1]
+            currentPage = 0
+        elif keyType == "char" and keyValue.isprintable():
+            userInput += keyValue
+            currentPage = 0
+
+
 def countSort(data, key):
     if not data:
         return []
@@ -116,7 +224,7 @@ def prepareSortKey(data):
     return "id"
 
 
-def toPriceSortableRecords(records):
+def priceSortRecords(records):
     sortable = []
     for item in records:
         priceValue = int(item.get("totalPrice", 0))
@@ -130,7 +238,7 @@ def toPriceSortableRecords(records):
     return sortable
 
 
-def createDemoResultPanel(prefix, matchedCount, cheapestRecord, highestRecord):
+def createDemoResult(prefix, matchedCount, cheapestRecord, highestRecord):
     if cheapestRecord is None:
         cheapestText = "N/A"
     else:
@@ -159,7 +267,7 @@ def createDemoResultPanel(prefix, matchedCount, cheapestRecord, highestRecord):
     return Panel(detailText, border_style=panelColor, expand=True)
 
 
-def createDemoTop3Table(sortedByPrice):
+def createDemoTop3(sortedByPrice):
     table = Table(border_style="green", expand=True)
     table.add_column("Rank", justify="right", style="bold", width=4)
     table.add_column("Booking ID", style="cyan", no_wrap=True, min_width=12)
@@ -212,13 +320,13 @@ def runTrieCountSortDemo(jsonData):
         cheapest = None
         expensive = None
         if matched:
-            sortable = toPriceSortableRecords(matched)
+            sortable = priceSortRecords(matched)
             sortedByPrice = countSort(sortable, "totalPrice")
             cheapest = sortedByPrice[0]
             expensive = sortedByPrice[-1]
 
-        detailPanel = createDemoResultPanel(prefix, len(matched), cheapest, expensive)
-        top3Table = createDemoTop3Table(sortedByPrice)
+        detailPanel = createDemoResult(prefix, len(matched), cheapest, expensive)
+        top3Table = createDemoTop3(sortedByPrice)
         demoTable.add_row(detailPanel, top3Table)
     console.print(demoTable)
 
@@ -250,22 +358,29 @@ def startupLoad():
     print("3. Reading mockBookings.json")
     jsonData = loadJsonData()
     print(f"4. {len(jsonData)} mock bookings read.")
-    print("5. Creating trie.")
+    print("5. Creating email trie.")
     emailTrie = jsonToTrie(jsonData, "user_email")
+    print("6. Creating destination trie.")
+    destinationTrie = jsonToTrie(jsonData, "flight_info.destination")
+    destinationOptions = collectUniqueValues(jsonData, "flight_info.destination")
     clearConsole()
     printLogo()
-    return jsonData, emailTrie
+    return jsonData, emailTrie, destinationTrie, destinationOptions
 
 
 def printMenu():
     print("1. Search Booking by Email\t\t[Trie]")
-    print("2. Run Demo\t\t\t\t[Trie]\t[Count Sort]")
-    print("3. Sort All Orders by Total Price\t[Count Sort]")
-    print("4. Exit")
+    print("2. Search Booking by Destination\t[Trie]")
+    print("3. Run Demo\t\t\t\t[Trie]\t[Count Sort]")
+    print("4. Sort All Orders by Total Price\t[Count Sort]")
+    print("5. Exit")
     print("")
 
 
 def readNavigationKey():
+    if not sys.stdin.isatty():
+        return "exit"
+
     if os.name == "nt":
         import msvcrt
         first = msvcrt.getch()
@@ -302,7 +417,7 @@ def readNavigationKey():
         termios.tcsetattr(fileDescriptor, termios.TCSADRAIN, oldSettings)
 
 
-def createBookingTablePage(records, pageNumber, pageSize, prefix):
+def bookingTablePage(records, pageNumber, pageSize, prefix):
     startIndex = pageNumber * pageSize
     endIndex = min(startIndex + pageSize, len(records))
     table = Table(title=f"Search Booking by Email Prefix: '{prefix}'")
@@ -330,24 +445,23 @@ def createBookingTablePage(records, pageNumber, pageSize, prefix):
     return table
 
 
-def runPrefixSearch(emailTrie):
+def runSearch(records, searchTitle, queryText):
     console = Console()
-    prefix = input("Enter email prefix: ").strip().lower()
-    matched = emailTrie.findByPrefix(prefix)
-    if not matched:
+    if not records:
         print("Matched records: 0")
         return
 
     pageSize = 10
-    totalPages = math.ceil(len(matched) / pageSize)
+    totalPages = math.ceil(len(records) / pageSize)
     currentPage = 0
 
     while True:
         clearConsole()
         printLogo()
-        table = createBookingTablePage(matched, currentPage, pageSize, prefix)
+        table = bookingTablePage(records, currentPage, pageSize, queryText)
+        table.title = f"{searchTitle}: '{queryText}'"
         console.print(table)
-        print(f"Page {currentPage + 1}/{totalPages} | Total matched: {len(matched)}")
+        print(f"Page {currentPage + 1}/{totalPages} | Total matched: {len(records)}")
         print("Use LEFT/RIGHT arrow to change page, Q or Enter to return menu.")
         key = readNavigationKey()
         if key == "right" and currentPage < totalPages - 1:
@@ -356,6 +470,21 @@ def runPrefixSearch(emailTrie):
             currentPage -= 1
         elif key == "exit":
             break
+
+
+def runEmailSearch(emailTrie):
+    prefix = input("Enter email prefix: ").strip().lower()
+    matched = emailTrie.findByPrefix(prefix)
+    runSearch(matched, "Search Booking by Email Prefix", prefix)
+
+
+def runDestinationSearch(destinationTrie, _destinationOptions):
+    if sys.stdin.isatty():
+        liveDestinationPrefixSearch("Enter destination keyword: ", destinationTrie)
+        return
+
+    destinationInput, matched = liveDestinationPrefixSearch("Enter destination keyword: ", destinationTrie)
+    runSearch(matched, "Search Booking by Destination", destinationInput)
 
 
 def createPriceRankingTable(records, title, color):
@@ -376,7 +505,7 @@ def createPriceRankingTable(records, title, color):
 
 def runCountSortAll(jsonData):
     console = Console()
-    sortable = toPriceSortableRecords(jsonData)
+    sortable = priceSortRecords(jsonData)
     if not sortable:
         console.print(Panel("No booking records to sort.", border_style="yellow"))
         return
@@ -401,20 +530,23 @@ def runCountSortAll(jsonData):
 
 
 def main():
-    jsonData, emailTrie = startupLoad()
+    jsonData, emailTrie, destinationTrie, destinationOptions = startupLoad()
     while True:
         printMenu()
         choice = input("Select option: ").strip()
         if choice == "1":
             clearConsole()
-            runPrefixSearch(emailTrie)
+            runEmailSearch(emailTrie)
         elif choice == "2":
             clearConsole()
-            runTrieCountSortDemo(jsonData)
+            runDestinationSearch(destinationTrie, destinationOptions)
         elif choice == "3":
             clearConsole()
-            runCountSortAll(jsonData)
+            runTrieCountSortDemo(jsonData)
         elif choice == "4":
+            clearConsole()
+            runCountSortAll(jsonData)
+        elif choice == "5":
             print("Exiting program.")
             break
         else:

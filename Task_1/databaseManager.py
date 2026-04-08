@@ -21,7 +21,7 @@ class DatabaseManager:
 
     def checkDatabaseExists(self):
         if not self.dbPath.exists():
-            createDbScript = self.base_dir / "legacy" / "create_db.py"
+            createDbScript = self.base_dir / "tools" / "create_db.py"
             if createDbScript.exists() == False:
                 print("Error: Missing database script")
             else:
