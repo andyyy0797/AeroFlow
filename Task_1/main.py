@@ -798,10 +798,10 @@ class ManageFlightsScreen(Screen):
         )
         yield Footer()
 
-    def loadFlights(self):
+    async def loadFlights(self):
         rows = dbManager.fetchAllFlights()
         flightList = self.query_one("#flightList", Vertical)
-        flightList.remove_children()
+        await flightList.remove_children()
         self.flightMap = {}
         if not rows:
             flightList.mount(Label("No flights found.", classes="subtitle"))
@@ -816,11 +816,11 @@ class ManageFlightsScreen(Screen):
                 )
             )
 
-    def on_mount(self) -> None:
-        self.loadFlights()
+    async def on_mount(self) -> None:
+        await self.loadFlights()
 
-    def on_screen_resume(self) -> None:
-        self.loadFlights()
+    async def on_screen_resume(self) -> None:
+        await self.loadFlights()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
