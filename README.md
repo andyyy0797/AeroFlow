@@ -31,6 +31,6 @@ This task focuses on the independent study of a data structure and an algorithm 
 
 ## Deliverables
 * **Source Code**: Full Python implementation for both tasks.
-* **User Guide**: Instructions on how to run the application.
+* **User Guide**: Instructions on how to run the application. _(README.md in the folder for each task)_
 * **Introduction Video**: A 5-minute video demonstration linked in this repository.
 * **Project Reports**: Detailed PDF reports for Task 1 and Task 2 submitted via OLE.
