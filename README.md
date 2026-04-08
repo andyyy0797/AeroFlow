@@ -15,9 +15,9 @@ The project is divided into two primary tasks as per the course requirements:
 **AeroFlow** is a Python-based flight management system designed to solve complex logistics in the aviation industry. 
 
 * **Core Functions**:
-    * **Flight Scheduling**: Manage domestic and international flight routes.
-    * **Passenger Services**: User registration, seat booking, and ticket generation.
-    * **Overbooking & Waitlist Mechanism**: A sophisticated system to handle overbooked flights using a **Queue** (FIFO) data structure for fair standby management.
+    * **Flight Scheduling**: Manage flight routes.
+    * **Passenger Services**: User registration, flight booking, and booking management.
+
 * **OOP Implementation**: 
     * The application uses **Inheritance** (User class and Passenger Class), **Encapsulation** (Password Handling), and **Polymorphism** (Dynamic pricing strategies).
 
