@@ -19,6 +19,7 @@ weighting = ([60] * len(destinations["Tier 1 (Popular)"]) + [30] * len(destinati
 
 destinationSum = destinations["Tier 1 (Popular)"] + destinations["Tier 2 (Secondary)"] + destinations["Tier 3 (Other)"]
 
+# Normalized user's first and last name for generate mock email address
 def normalizedNamePart(name: str) -> str:
     lowered = name.lower()
     return "".join(character for character in lowered if character.isalpha())
