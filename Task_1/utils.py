@@ -4,10 +4,9 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Select
 
-
+# Hash the password by SHA256 algorithm to protect sensitive data
 def hashPassword(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
 
 class DatePicker(Horizontal):
     monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
