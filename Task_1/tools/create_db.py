@@ -1,5 +1,3 @@
-# To all: 除非你玩壞咗個 SQLite DB，如果唔係唔使理呢個 File。
-
 import sqlite3
 from pathlib import Path
 
@@ -8,6 +6,7 @@ DB_PATH = Path(__file__).resolve().parent.parent / "aeroflow.db"
 db = sqlite3.connect(DB_PATH)
 cursor = db.cursor()
 
+# delete all existing tables before creating those if their are any
 cursor.execute('DROP TABLE IF EXISTS users')
 cursor.execute('DROP TABLE IF EXISTS flights')
 cursor.execute('DROP TABLE IF EXISTS bookings')
@@ -66,6 +65,7 @@ CREATE TABLE IF NOT EXISTS sub_passengers (
 )
 ''')
 
+# Write some demo users into the database, including a super admin account
 demo_users = [
     (
         'admin',
@@ -112,6 +112,7 @@ cursor.executemany(
     demo_users,
 )
 
+# add some demo flight to the database
 demo_flights = [
     (
         'UO854',
