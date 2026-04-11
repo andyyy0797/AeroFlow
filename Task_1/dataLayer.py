@@ -19,6 +19,7 @@ class User:
     def setPassword(self, password):
         self.__password = password
 
+    # Encapsulation for password, a sensitive data
     @property
     def password(self):
         return self.getPassword()
