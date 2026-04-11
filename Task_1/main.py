@@ -1599,6 +1599,7 @@ class PaymentScreen(Screen):
         finishButton.display = True
         self.notify("Booking created successfully.", severity="information")
 
+    # Mock payment process (no credit card information required)
     def processPaymentTick(self):
         statusLabel = self.query_one("#paymentStatusLabel", Label)
         if self.countdownSeconds > 0:
@@ -1629,6 +1630,7 @@ class PaymentScreen(Screen):
         self.paymentTimer = self.set_interval(1, self.processPaymentTick)
 
 class AeroFlow(App):
+    # Styling of TUI
     CSS = """
     Screen {
         align: center middle;
