@@ -8,13 +8,11 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-
 class TrieNode:
     def __init__(self):
         self.children = {}
         self.isEnd = False
         self.records = []
-
 
 class Trie:
     def __init__(self):
@@ -52,7 +50,7 @@ def getNestedValue(record, keyPath):
         value = value[key]
     return value
 
-
+# convert mockBookings.json to a trie
 def jsonToTrie(jsonData, keyPath):
     trie = Trie()
     for record in jsonData:
@@ -77,7 +75,7 @@ def collectUniqueValues(jsonData, keyPath):
             uniqueValues.add(value.strip())
     return sorted(uniqueValues, key=str.lower)
 
-
+# Key listener
 def readAutocompleteKey():
     if os.name == "nt":
         import msvcrt
@@ -129,7 +127,7 @@ def readAutocompleteKey():
     finally:
         termios.tcsetattr(fileDescriptor, termios.TCSADRAIN, oldSettings)
 
-
+# Live updated autocomplete search function
 def liveDestinationPrefixSearch(prompt, destinationTrie):
     if not sys.stdin.isatty():
         keyword = input(prompt).strip()
