@@ -1,7 +1,8 @@
 import secrets
+from abc import ABC, abstractmethod
 
 
-class User:
+class User(ABC):
     def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=None, isAdmin=0):
         self.userID = userID if userID else secrets.token_hex(4)
         self.email = email
@@ -28,15 +29,29 @@ class User:
     def password(self, password):
         self.setPassword(password)
 
+    # Abstraction: subclasses must declare their role
+    @abstractmethod
+    def getRole(self) -> str:
+        pass
+
+    def __str__(self):
+        return f"{self.firstName} {self.lastName} <{self.email}> [{self.getRole()}]"
+
 
 class Admin(User):
     def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=None):
         super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=userID, isAdmin=1)
 
+    def getRole(self) -> str:
+        return "admin"
+
 
 class Passenger(User):
     def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=None):
         super().__init__(email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=userID, isAdmin=0)
+
+    def getRole(self) -> str:
+        return "passenger"
 
 
 class SubPassenger:
@@ -46,6 +61,9 @@ class SubPassenger:
         self.gender = gender
         self.nationality = nationality
         self.dateOfBirth = dateOfBirth
+
+    def __str__(self):
+        return f"{self.firstName} {self.lastName} ({self.dateOfBirth})"
 
 
 defaultClasses = {
@@ -82,6 +100,34 @@ class Flight:
         self.classesAvailable = list(self.classRatios.keys())
         self.standardPrice = standardPrice
 
+    def __str__(self):
+        return f"[{self.flightNumber}] {self.departure} -> {self.destination} @ {self.departureTime}"
+
+
+# ADT: a bounded collection of sub-passengers (max 4, so total passengers <= 5)
+class PassengerList:
+    MAX_CAPACITY = 4
+
+    def __init__(self):
+        self._items = []
+
+    def add(self, passenger: SubPassenger):
+        if len(self._items) >= self.MAX_CAPACITY:
+            raise ValueError("A booking can have a maximum of 5 passengers.")
+        self._items.append(passenger)
+
+    def __len__(self):
+        return len(self._items)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __getitem__(self, index):
+        return self._items[index]
+
+    def __repr__(self):
+        return f"PassengerList({self._items!r})"
+
 
 class Booking:
     def __init__(self, userID, flightID, travel_class, price, bookingID=None, sub_passengers=None):
@@ -90,6 +136,9 @@ class Booking:
         self.flightID = flightID
         self.travel_class = travel_class
         self.price = price
-        self.sub_passengers = sub_passengers if sub_passengers else []
-        if len(self.sub_passengers) + 1 > 5:
-            raise ValueError("A booking can have a maximum of 5 passengers.")
+        self.sub_passengers = PassengerList()
+        for sp in (sub_passengers or []):
+            self.sub_passengers.add(sp)
+
+    def __str__(self):
+        return f"Booking {self.bookingID}: Flight {self.flightID} [{self.travel_class}] ${float(self.price):.2f}"
