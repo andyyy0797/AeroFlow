@@ -167,3 +167,6 @@ This task demonstrates practical integration of:
 - **Trie** for fast prefix-based lookup
 - **Counting Sort** for efficient integer sorting
 
+## 9) Introduction Video
+You may access the introduction video through [https://youtu.be/oeBaiCjld0k](https://youtu.be/oeBaiCjld0k).
+
