@@ -1,7 +1,6 @@
 import secrets
 from abc import ABC, abstractmethod
 
-
 class User(ABC):
     def __init__(self, email, password, firstName, lastName, gender, nationality, dateOfBirth, userID=None, isAdmin=0):
         self.userID = userID if userID else secrets.token_hex(4)

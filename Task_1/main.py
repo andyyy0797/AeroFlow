@@ -349,6 +349,9 @@ class AdminManageBookingsScreen(Screen):
             Horizontal(
                 Button("View Booking", id="viewBooking"),
                 Button("Edit Booking", id="editBooking", variant="primary"),
+                classes="detailActionRow"
+            ),
+            Horizontal(
                 Button("Delete Booking", id="deleteBooking", variant="error"),
                 Button("Refresh", id="refreshBookingList"),
                 classes="detailActionRow"
