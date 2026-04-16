@@ -110,3 +110,6 @@ Stores extra passengers under one booking.
 - `gender` (`TEXT`, `NOT NULL`)
 - `nationality` (`TEXT`, `NOT NULL`)
 - `date_of_birth` (`TEXT`, `NOT NULL`)
+
+## 5) Introduction Video
+You may access the introduction video through [https://youtu.be/WqAveeglSww](https://youtu.be/WqAveeglSww).
