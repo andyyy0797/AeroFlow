@@ -4,7 +4,7 @@
 ## Project Overview
 This is the Group Project for the course **COMP 2090SEF, HKMU 2025/26 Spring Term**.
 
-Our team (Group 10) has developed an integrated aviation management solution that addresses real-life scheduling challenges through Object-Oriented Programming (OOP) and advanced data structures.
+Our team (Group 26) has developed an integrated aviation management solution that addresses real-life scheduling challenges through Object-Oriented Programming (OOP) and advanced data structures.
 
 ---
 
